@@ -1,7 +1,6 @@
 CREATE DATABASE agencia_aseguradora;
 USE agencia_aseguradora;
 
-
 -- CREAMOS TABLA PARA REGISTRAR USUARIOS
 CREATE TABLE usuario (
 id_usuario INT NOT NULL AUTO_INCREMENT,
@@ -46,15 +45,16 @@ email VARCHAR(30) NOT NULL,
 dni NUMERIC(20) NOT NULL,
 id_usuario INT AUTO_INCREMENT,
 PRIMARY KEY (id_usuario, dni),
-FOREIGN KEY (id_usuario) REFERENCES usuario(id_usuario));
-
+CONSTRAINT FOREIGN KEY (id_usuario) REFERENCES usuario(id_usuario));
 
 -- CREAMOS TABLAS PARA REGISTRAR LOS SERVICIOS 
 CREATE TABLE IF NOT EXISTS servicios(
 id_producto INT AUTO_INCREMENT,
 tipo VARCHAR(30) NOT NULL,
 precios_servicios INT NOT NULL,
-PRIMARY KEY (Id_producto)
+id_usuario INT,
+PRIMARY KEY (Id_producto),
+CONSTRAINT FOREIGN KEY (id_usuario) REFERENCES usuario(id_usuario)
 );
 
 ALTER TABLE servicios modify tipo VARCHAR(150) NOT NULL;
@@ -65,7 +65,9 @@ id_orden INT AUTO_INCREMENT,
 fecha DATE NOT NULL,
 nombre VARCHAR(30) NOT NULL,
 tipo VARCHAR(30) NOT NULL,
-PRIMARY KEY(id_orden)
+id_producto INT,
+PRIMARY KEY(id_orden),
+CONSTRAINT FOREIGN KEY (id_producto) REFERENCES servicios(id_producto)
 );
 
 
@@ -246,10 +248,56 @@ SELECT calcular_total_venta_fn (25000) AS precio_con_iva; -- Tomando el valor de
 
 
 -- Se crea la tabla LOG--
+DROP TABLE IF EXISTS clientes;
 CREATE TABLE clientes
 (
-nombre_de_usuario VARCHAR(15) NOT NULL,
-nombre VARCHAR(20) NOT NULL,
-apellido VARCHAR(20) NOT NULL
+id_orden INT AUTO_INCREMENT,
+fecha DATE NOT NULL,
+nombre VARCHAR(30) NOT NULL,
+tipo VARCHAR(30) NOT NULL,
+PRIMARY KEY(id_orden)
 );
 
+-- Se crea el trigger
+-- Por cada servicio vendido agregar el cliente a una nueva tabla.
+DROP TRIGGER IF EXISTS clientes_nuevos_tr;
+CREATE TRIGGER `clientes_nuevos_tr`
+AFTER INSERT ON `servicios_contratados`
+FOR EACH ROW
+INSERT INTO `clientes` (id_orden, fecha, nombre, tipo) VALUES (NEW.id_orden, NEW.fecha, NEW.nombre, NEW.tipo);
+
+-- Comprobamos que el trigger funcione
+INSERT INTO servicios_contratados (fecha, nombre, tipo) VALUES
+('2011-11-11', 'Sanchez', "Viviendas Monoambiente");
+
+-- Creamos la tabla LOG --
+DROP TABLE IF EXISTS up_pedido;
+CREATE TABLE up_pedido (
+id_orden INT AUTO_INCREMENT,
+fecha DATE NOT NULL,
+nombre VARCHAR(30) NOT NULL,
+tipo VARCHAR(30) NOT NULL,
+PRIMARY KEY(id_orden)
+);
+
+-- Creamos el trigger --
+-- Este trigger tiene que funcionar a medida que los pedidos se modifiquen, ya sea que hubo un error de seleccion o algo, guarde 
+-- la informacion antes del camibo.
+
+DROP TRIGGER IF EXISTS up_pedido_tr;
+DELIMITER $$
+CREATE TRIGGER `up_pedido_tr`
+BEFORE UPDATE ON `servicios_contratados`
+	FOR EACH ROW
+BEGIN 
+	INSERT INTO up_pedido (id_orden, fecha, nombre, tipo) VALUES (OLD.id_orden, OLD.fecha, OLD.nombre, OLD.tipo);
+END$$
+DELIMITER ;
+
+-- Comprobamos que funcione
+UPDATE servicios_contratados
+SET tipo = "Vivienda Monoambiente"
+WHERE id_orden = 2;
+
+-- Mostramos los datos antes del cambio
+select*from up_pedido;
